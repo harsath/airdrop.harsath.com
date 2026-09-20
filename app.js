@@ -1,4 +1,4 @@
-const TRYSTERO_URL = 'https://esm.sh/trystero@0.21.6/torrent'
+const TRYSTERO_URL = 'https://esm.sh/trystero@0.21.6/torrent?bundle'
 const APP_ID = 'airdrop-harsath-com'
 const MAX_SIZE = 5 * 1024 * 1024 // 5 MB per-file upload limit
 const RELAY_URLS = ['wss://tracker.openwebtorrent.com', 'wss://tracker.webtorrent.dev']
