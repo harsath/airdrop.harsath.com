@@ -113,10 +113,10 @@
 
       <h3>Finding the other peer (signaling)</h3>
       <p>Two browsers behind NAT can't address each other directly. This app uses public
-      <b>WebTorrent WebSocket trackers</b> (the BitTorrent tracker protocol) for the introduction.
-      Both announce the same <code>infohash</code> (from app ID + your room) and the tracker relays
-      each side's WebRTC handshake, the <code>SDP</code> offer/answer. It passes only these tiny text
-      messages and never sees your files.</p>
+      <b>Nostr relays</b> (ordinary <code>wss:443</code>, which corporate firewalls rarely block)
+      for the introduction. Both subscribe to a shared topic (from app ID + your room) and each
+      side's WebRTC handshake, the <code>SDP</code> offer/answer, is relayed to the other. The relay
+      passes only these tiny text messages and never sees your files.</p>
 
       <h3>Punching through NAT (STUN + ICE)</h3>
       <p>Each browser asks a <b>STUN</b> server "what's my public IP:port?" and collects candidate

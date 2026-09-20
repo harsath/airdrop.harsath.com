@@ -1,7 +1,10 @@
-const TRYSTERO_URL = 'https://esm.sh/trystero@0.21.6/torrent?bundle'
+// Nostr signaling (jsDelivr bundle = single self-contained file). Chosen over
+// torrent trackers because corporate firewalls block those; Nostr relays are
+// ordinary wss:443 and get through. Swap the module + RELAY_URLS to change strategy.
+const TRYSTERO_URL = 'https://cdn.jsdelivr.net/npm/trystero@0.21.6/nostr/+esm'
 const APP_ID = 'airdrop-harsath-com'
 const MAX_SIZE = 5 * 1024 * 1024 // 5 MB per-file upload limit
-const RELAY_URLS = ['wss://tracker.openwebtorrent.com', 'wss://tracker.webtorrent.dev']
+const RELAY_URLS = ['wss://relay.damus.io', 'wss://nos.lol', 'wss://nostr.wine']
 const TURN_URL =
   'https://airdrop.metered.live/api/v1/turn/credentials?apiKey=fc7c0fb1b607619385e5c1e223c488e495d3'
 
@@ -166,7 +169,7 @@ async function boot() {
     iceServers = [{urls: 'stun:stun.l.google.com:19302'}]
   }
 
-  diag(`trackers: ${RELAY_URLS.join(', ')}`, 'dim')
+  diag(`signaling (nostr): ${RELAY_URLS.join(', ')}`, 'dim')
   try {
     room = joinRoom({appId: APP_ID, rtcConfig: {iceServers}, relayUrls: RELAY_URLS}, roomId)
   } catch (err) {
