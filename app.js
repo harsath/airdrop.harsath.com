@@ -1,10 +1,12 @@
-// Nostr signaling (jsDelivr bundle = single self-contained file). Chosen over
-// torrent trackers because corporate firewalls block those; Nostr relays are
-// ordinary wss:443 and get through. Swap the module + RELAY_URLS to change strategy.
-const TRYSTERO_URL = 'https://cdn.jsdelivr.net/npm/trystero@0.21.6/nostr/+esm'
+// Torrent-tracker signaling (esm.sh bundle = single self-contained file, avoids
+// the deep-import failure on GitHub Pages). tracker.webtorrent.dev is reachable
+// from the corporate VM and tested reliable; openwebtorrent is blocked there but
+// kept as a fallback for other networks. If trackers ever get blocked everywhere,
+// the Firebase strategy is the documented fallback (see README history).
+const TRYSTERO_URL = 'https://esm.sh/trystero@0.21.6/torrent?bundle'
 const APP_ID = 'airdrop-harsath-com'
 const MAX_SIZE = 5 * 1024 * 1024 // 5 MB per-file upload limit
-const RELAY_URLS = ['wss://relay.damus.io', 'wss://nos.lol', 'wss://nostr.wine']
+const RELAY_URLS = ['wss://tracker.webtorrent.dev', 'wss://tracker.openwebtorrent.com']
 const TURN_URL =
   'https://airdrop.metered.live/api/v1/turn/credentials?apiKey=fc7c0fb1b607619385e5c1e223c488e495d3'
 
@@ -133,6 +135,23 @@ async function logConnection(peerId, pc) {
   diag(`   (${peerId.slice(0, 6)}: no succeeded candidate pair yet)`, 'dim')
 }
 
+// Independently probe each tracker so the diagnostics box shows reachability
+// (Trystero logs this only to the browser console, not here).
+function probeTracker(url) {
+  let done = false
+  const ws = new WebSocket(url)
+  const finish = ok => {
+    if (done) return
+    done = true
+    clearTimeout(timer)
+    diag(`   tracker ${ok ? 'reachable' : 'UNREACHABLE'}: ${url}`, ok ? 'direct' : 'relay')
+    try { ws.close() } catch {}
+  }
+  const timer = setTimeout(() => finish(false), 6000)
+  ws.onopen = () => finish(true)
+  ws.onerror = () => finish(false)
+}
+
 let room = null
 inspectBtn.addEventListener('click', () => {
   if (!room) return
@@ -169,7 +188,8 @@ async function boot() {
     iceServers = [{urls: 'stun:stun.l.google.com:19302'}]
   }
 
-  diag(`signaling (nostr): ${RELAY_URLS.join(', ')}`, 'dim')
+  diag(`signaling (trackers):`, 'dim')
+  RELAY_URLS.forEach(probeTracker) // fire-and-forget; results append as they resolve
   try {
     room = joinRoom({appId: APP_ID, rtcConfig: {iceServers}, relayUrls: RELAY_URLS}, roomId)
   } catch (err) {

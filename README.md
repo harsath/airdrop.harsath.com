@@ -6,7 +6,7 @@ Built for moving files between a corporate VM (locked-down firewall) and a perso
 
 ## How it works
 
-- **Signaling** — [Trystero](https://github.com/dmotz/trystero) exchanges the WebRTC handshake over public BitTorrent trackers, so no signaling server is needed.
+- **Signaling** — [Trystero](https://github.com/dmotz/trystero) exchanges the WebRTC handshake over public WebTorrent WebSocket trackers, so no signaling server is needed. The tracker list is set in `RELAY_URLS` in `app.js`; `tracker.webtorrent.dev` is the primary (reachable from the target corporate network). If trackers ever get blocked everywhere, Trystero can switch to a Firebase Realtime Database strategy instead (Google infra on `wss:443`) — a documented fallback.
 - **Relay when direct fails** — a free [metered.ca](https://www.metered.ca/) TURN server relays the encrypted stream when a direct peer-to-peer path is blocked (e.g. strict corporate firewalls). On a permissive network (same LAN), the transfer goes direct and touches no server at all.
 - **Hosting** — static files on GitHub Pages.
 
@@ -64,6 +64,32 @@ Connections are a full mesh: with N participants, each peer holds a separate enc
 | `index.html` | UI and styles |
 | `app.js` | Trystero room, TURN fetch, send/receive logic |
 | `CNAME` | Custom domain for GitHub Pages |
+
+## Fallback: Firebase signaling
+
+Not needed for the default setup (torrent trackers). Only use this if trackers get blocked on every network you care about. It swaps signaling to a free Firebase Realtime Database (Google infra on `wss:443`, which corporate firewalls allow but which won't rate-ban you like public Nostr relays do).
+
+To switch: set `TRYSTERO_URL` to `https://cdn.jsdelivr.net/npm/trystero@0.21.6/firebase/+esm`, replace the `relayUrls` option with `appId: FIREBASE_DB_URL`, then do this one-time Firebase setup:
+
+1. Open the [Firebase console](https://console.firebase.google.com/) and create a project (Analytics can be skipped).
+2. **Build → Realtime Database → Create Database.** Pick a location and start in **test mode**.
+3. Copy the database URL shown at the top of that page, e.g. `https://your-project-default-rtdb.firebaseio.com` (region variants look like `https://your-project-default-rtdb.europe-west1.firebasedatabase.app`).
+4. In the **Rules** tab, scope access to Trystero's path and publish:
+
+   ```json
+   {
+     "rules": {
+       "__trystero__": {
+         ".read": true,
+         ".write": true
+       }
+     }
+   }
+   ```
+
+5. Paste the database URL into `FIREBASE_DB_URL` at the top of `app.js`.
+
+Only the database URL is needed (no API key). Access is governed by the rules above, not by a secret, so the URL is safe to ship in the client.
 
 ## Run locally
 
