@@ -135,21 +135,45 @@ async function logConnection(peerId, pc) {
   diag(`   (${peerId.slice(0, 6)}: no succeeded candidate pair yet)`, 'dim')
 }
 
-// Independently probe each tracker so the diagnostics box shows reachability
-// (Trystero logs this only to the browser console, not here).
+// Probe a tracker's reachability (Trystero logs this only to the console).
+// Resolves true/false so boot() can filter out blocked trackers before joining.
 function probeTracker(url) {
-  let done = false
-  const ws = new WebSocket(url)
-  const finish = ok => {
-    if (done) return
-    done = true
-    clearTimeout(timer)
-    diag(`   tracker ${ok ? 'reachable' : 'UNREACHABLE'}: ${url}`, ok ? 'direct' : 'relay')
-    try { ws.close() } catch {}
+  return new Promise(resolve => {
+    let done = false
+    const ws = new WebSocket(url)
+    const finish = ok => {
+      if (done) return
+      done = true
+      clearTimeout(timer)
+      diag(`   tracker ${ok ? 'reachable' : 'UNREACHABLE'}: ${url}`, ok ? 'direct' : 'relay')
+      try { ws.close() } catch {}
+      resolve(ok)
+    }
+    const timer = setTimeout(() => finish(false), 5000)
+    ws.onopen = () => finish(true)
+    ws.onerror = () => finish(false)
+  })
+}
+
+// Probe whether the TURN relay path actually works from this network.
+// iceTransportPolicy:'relay' gathers ONLY relay candidates, so a relay candidate
+// appearing means metered's TURN is reachable; none means it's blocked.
+function probeTurn(iceServers) {
+  const pc = new RTCPeerConnection({iceServers, iceTransportPolicy: 'relay'})
+  pc.createDataChannel('probe')
+  let relay = false
+  pc.onicecandidate = e => {
+    if (e.candidate) {
+      if (e.candidate.type === 'relay') {
+        relay = true
+        diag(`   TURN relay OK: ${e.candidate.address}:${e.candidate.port}/${e.candidate.protocol}`, 'direct')
+      }
+    } else {
+      diag(relay ? '   TURN reachable ✓' : '   TURN UNREACHABLE ✗ (relay path blocked)', relay ? 'dim' : 'relay')
+      pc.close()
+    }
   }
-  const timer = setTimeout(() => finish(false), 6000)
-  ws.onopen = () => finish(true)
-  ws.onerror = () => finish(false)
+  pc.createOffer().then(o => pc.setLocalDescription(o)).catch(() => {})
 }
 
 let room = null
@@ -188,10 +212,17 @@ async function boot() {
     iceServers = [{urls: 'stun:stun.l.google.com:19302'}]
   }
 
-  diag(`signaling (trackers):`, 'dim')
-  RELAY_URLS.forEach(probeTracker) // fire-and-forget; results append as they resolve
+  diag('checking TURN relay reachability…', 'dim')
+  probeTurn(iceServers) // logs TURN reachable / blocked into the box
+
+  diag('signaling — probing trackers:', 'dim')
+  const reachable = (await Promise.all(RELAY_URLS.map(probeTracker)))
+    .map((ok, i) => (ok ? RELAY_URLS[i] : null)).filter(Boolean)
+  // Only hand Trystero the reachable trackers, so blocked ones don't spam retries.
+  const usable = reachable.length ? reachable : RELAY_URLS
+  diag(reachable.length ? `using: ${usable.join(', ')}` : 'NO reachable tracker — signaling will fail', reachable.length ? 'dim' : 'relay')
   try {
-    room = joinRoom({appId: APP_ID, rtcConfig: {iceServers}, relayUrls: RELAY_URLS}, roomId)
+    room = joinRoom({appId: APP_ID, rtcConfig: {iceServers}, relayUrls: usable}, roomId)
   } catch (err) {
     diag(`ERROR joining room: ${err.message}`); setStatus('Failed to join room'); return
   }
