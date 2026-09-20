@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>airdrop.harsath.com</title>
+  <style>
+    :root {
+      --text: #111;
+      --muted: #777;
+      --border: #e3e3e3;
+      --accent: #2563eb;
+      --ok: #16a34a;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      color: var(--text);
+      max-width: 620px;
+      margin: 40px auto;
+      padding: 0 16px;
+      line-height: 1.5;
+    }
+    h1 { font-size: 20px; margin: 0 0 2px; }
+    .sub { color: var(--muted); font-size: 13px; margin-bottom: 20px; }
+    .header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+    .share-label { font-size: 13px; color: var(--muted); margin-top: 8px; }
+    button.ghost { background: transparent; color: var(--accent); padding: 4px 8px; }
+    button.ghost:hover { background: #f0f4ff; }
+
+    dialog#how {
+      max-width: 520px; width: calc(100% - 32px); border: 1px solid var(--border);
+      border-radius: 12px; padding: 0; color: var(--text);
+    }
+    dialog#how::backdrop { background: rgba(0, 0, 0, .4); }
+    .how-head {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 14px 18px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: #fff;
+    }
+    .how-body { padding: 4px 18px 18px; font-size: 14px; }
+    .how-body h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 18px 0 4px; }
+    .how-body p { margin: 6px 0; }
+    .how-body ul { margin: 6px 0; padding-left: 18px; }
+    .how-body li { margin: 5px 0; }
+    .how-body code { background: #f2f2f2; padding: 1px 4px; border-radius: 4px; font-size: 12px; }
+    .how-body a { color: var(--accent); }
+
+    .row { display: flex; gap: 8px; align-items: center; margin: 12px 0; }
+    input[type=text], input[readonly] {
+      flex: 1; font-size: 13px; padding: 8px 10px;
+      border: 1px solid var(--border); border-radius: 6px;
+      font-family: ui-monospace, monospace;
+    }
+    button {
+      font-size: 13px; padding: 8px 12px; border: none; border-radius: 6px;
+      background: #111; color: #fff; cursor: pointer;
+    }
+    button:hover { background: #333; }
+    button:disabled { opacity: .4; cursor: default; }
+
+    .status { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+    .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
+    .dot.on { background: var(--ok); }
+
+    #drop {
+      border: 2px dashed var(--border); border-radius: 8px;
+      padding: 36px 16px; text-align: center; color: var(--muted);
+      cursor: pointer; transition: border-color .15s, background .15s;
+    }
+    #drop.drag { border-color: var(--accent); background: #f5f8ff; color: var(--text); }
+    #drop strong { color: var(--text); }
+
+    .xfers { list-style: none; margin: 12px 0 0; padding: 0; }
+    .xfer { padding: 8px 0; border-top: 1px solid var(--border); font-size: 13px; }
+    .xfer:first-child { border-top: none; }
+    .xfer .head { display: flex; justify-content: space-between; gap: 12px; }
+    .xfer .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .xfer .meta { color: var(--muted); white-space: nowrap; }
+    .bar { height: 5px; background: #eee; border-radius: 3px; overflow: hidden; margin-top: 5px; }
+    .bar > span { display: block; height: 100%; width: 0; background: var(--accent); transition: width .1s; }
+    .xfer.done .bar > span { background: var(--ok); }
+    a.dl { color: var(--accent); text-decoration: none; }
+    .empty { color: var(--muted); font-size: 13px; }
+
+    h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 28px 0 8px; }
+    #log {
+      background: #111; color: #fff; padding: 12px; border-radius: 8px;
+      height: 240px; overflow: auto;
+      font-family: ui-monospace, monospace; font-size: 12px; white-space: pre-wrap;
+    }
+    #log .relay { color: #fbbf24; }
+    #log .direct { color: #4ade80; }
+    #log .dim { color: #c8c8c8; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <h1>airdrop.harsath.com</h1>
+      <div class="sub">Peer-to-peer encrypted file transfer. Bytes go browser-to-browser, never stored on a server.</div>
+    </div>
+    <button id="howBtn" class="ghost">How it works?</button>
+  </div>
+
+  <dialog id="how">
+    <div class="how-head">
+      <strong>How it works</strong>
+      <button id="howClose" class="ghost">✕</button>
+    </div>
+    <div class="how-body">
+      <p><b>The short version:</b> your file goes straight from one browser to another over a
+      <b>WebRTC data channel</b>. It is never uploaded to or stored on any server we run.</p>
+
+      <h3>Finding the other peer (signaling)</h3>
+      <p>Two browsers behind NAT can't address each other directly. This app uses public
+      <b>WebTorrent WebSocket trackers</b> (the BitTorrent tracker protocol) for the introduction.
+      Both announce the same <code>infohash</code> (from app ID + your room) and the tracker relays
+      each side's WebRTC handshake, the <code>SDP</code> offer/answer. It passes only these tiny text
+      messages and never sees your files.</p>
+
+      <h3>Punching through NAT (STUN + ICE)</h3>
+      <p>Each browser asks a <b>STUN</b> server "what's my public IP:port?" and collects candidate
+      addresses. The browser's built-in <b>ICE agent</b> then tries every candidate pair and keeps
+      the first that connects. On the same network this is a direct peer-to-peer link that touches
+      no server at all.</p>
+
+      <h3>When direct fails (TURN relay)</h3>
+      <p>Strict/corporate firewalls (symmetric NAT) block direct connections. ICE then falls back to a
+      <b>TURN relay</b>: both peers send to a relay that forwards between them. This app uses
+      <a href="https://www.metered.ca/tools/openrelay/" target="_blank" rel="noopener">metered.ca (the
+      OpenRelay project)</a>. Free tier caps relayed traffic at ~<b>20 GB/month</b>, and TURN relays
+      every byte, so a transfer counts roughly twice (in + out). Direct transfers skip it entirely.</p>
+
+      <h3>For the nerds</h3>
+      <ul>
+        <li><b>Encryption:</b> WebRTC data channels are always <b>DTLS</b>-encrypted end-to-end. Even
+        when relayed, TURN only sees ciphertext. SDP fingerprints let each peer verify the other.</li>
+        <li><b>Topology:</b> full mesh. With N peers, the sender uploads N−1 copies of a file. Fine
+        for a few peers, heavy beyond ~8.</li>
+        <li><b>Rendezvous:</b> the room ID lives in the URL <code>#hash</code>, so the static host
+        (GitHub Pages) needs no server-side routing.</li>
+        <li><b>Diagnostics:</b> the box below shows the real chosen candidate pair (<span
+        style="color:#b45309">RELAY</span> vs <span style="color:#15803d">DIRECT</span>) with actual
+        IPs and the STUN/TURN endpoint used. "inspect connections" re-reads WebRTC's own stats.</li>
+        <li><b>Limits:</b> 5 MB per file, received files buffered in memory, no resume if a tab closes
+        mid-transfer.</li>
+      </ul>
+    </div>
+  </dialog>
+
+  <div class="share-label">Share this URL</div>
+  <div class="row">
+    <input id="share" readonly />
+    <button id="copy">Copy link</button>
+  </div>
+  <div class="status">
+    <span class="dot" id="dot"></span>
+    <span id="peers">Starting…</span>
+  </div>
+
+  <div id="drop">
+    <strong>Drop files here</strong> or click to pick.<br />
+    Sent to everyone in this room. Max 5 MB per file.
+  </div>
+  <input id="file" type="file" multiple hidden />
+
+  <ul class="xfers" id="xfers">
+    <li class="empty" id="empty">No transfers yet.</li>
+  </ul>
+
+  <h2>Diagnostics <button id="inspect" style="float:right;padding:2px 8px;font-size:11px" disabled>inspect connections</button></h2>
+  <div id="log"></div>
+
+  <script>
+    // "How it works" modal — native <dialog>, no dependencies.
+    const howDlg = document.getElementById('how')
+    document.getElementById('howBtn').addEventListener('click', () => howDlg.showModal())
+    document.getElementById('howClose').addEventListener('click', () => howDlg.close())
+    howDlg.addEventListener('click', e => { if (e.target === howDlg) howDlg.close() }) // click backdrop
+  </script>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

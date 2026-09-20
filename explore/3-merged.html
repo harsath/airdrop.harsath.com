@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Explore 3 — Merged (Trystero + metered TURN + file)</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 620px; margin: 40px auto; padding: 0 16px; }
+    #log { background: #111; color: #ddd; padding: 12px; border-radius: 8px; height: 260px;
+           overflow: auto; font-family: ui-monospace, monospace; font-size: 13px; white-space: pre-wrap; }
+    input, button { font-size: 14px; padding: 8px; }
+    .row { display: flex; gap: 8px; margin: 12px 0; align-items: center; }
+    label { font-size: 13px; }
+  </style>
+</head>
+<body>
+  <h2>Part 3 — Merge: TURN feeds into Trystero, plus a real file</h2>
+  <p>
+    Same as Part 2, but now the metered ICE servers (from Part 1) are passed into Trystero via
+    <code>rtcConfig</code>. That's the whole "merge": <b>signaling from Trystero, relay from metered</b>.
+    Send a file, then click <b>Inspect connection</b> to see whether the path went direct or via TURN.
+  </p>
+
+  <div class="row">
+    <input id="room" value="explore-room-123" style="flex:1" />
+    <label><input type="checkbox" id="forceRelay" /> force TURN (test relay path)</label>
+    <button id="join">Join</button>
+  </div>
+
+  <div class="row">
+    <input type="file" id="file" disabled />
+    <button id="inspect" disabled>Inspect connection</button>
+  </div>
+
+  <div id="log"></div>
+
+  <script type="module">
+    import {joinRoom, selfId} from 'https://esm.sh/trystero@0.21.6/torrent'
+
+    const API_KEY = 'fc7c0fb1b607619385e5c1e223c488e495d3'
+    const TURN_URL = `https://airdrop.metered.live/api/v1/turn/credentials?apiKey=${API_KEY}`
+
+    const log = (...a) => {
+      const el = document.getElementById('log')
+      el.textContent += a.join(' ') + '\n'
+      el.scrollTop = el.scrollHeight
+      console.log(...a)
+    }
+
+    log('my selfId =', selfId)
+
+    let room, sendFile
+
+    document.getElementById('join').onclick = async () => {
+      const roomId = document.getElementById('room').value.trim()
+      const forceRelay = document.getElementById('forceRelay').checked
+
+      // --- PART 1 happens here: fetch metered's ICE servers ---
+      log('fetching TURN creds from metered…')
+      const iceServers = await (await fetch(TURN_URL)).json()
+      log('got', iceServers.length, 'ICE servers')
+
+      // --- THE MERGE: hand those servers to Trystero via rtcConfig ---
+      const rtcConfig = {iceServers}
+      if (forceRelay) {
+        // 'relay' tells the ICE agent to ONLY use TURN candidates — great for
+        // proving your TURN server works even when a direct path is available.
+        rtcConfig.iceTransportPolicy = 'relay'
+        log('iceTransportPolicy = relay (forcing TURN)')
+      }
+
+      room = joinRoom({
+        appId: 'explore-merged',
+        rtcConfig,
+        relayUrls: ['wss://tracker.openwebtorrent.com', 'wss://tracker.webtorrent.dev']
+      }, roomId)
+      log('joined room:', roomId)
+
+      const [send, receive, onProgress] = room.makeAction('file')
+      sendFile = send
+
+      onProgress((pct, peerId) => log(`  receiving from ${peerId.slice(0,6)}: ${Math.round(pct*100)}%`))
+      receive((data, peerId, meta) => {
+        log(`<- got file "${meta.name}" (${data.byteLength} bytes) from ${peerId.slice(0,6)}`)
+        const url = URL.createObjectURL(new Blob([data], {type: meta.type}))
+        const a = document.createElement('a')
+        a.href = url; a.download = meta.name; a.textContent = `download ${meta.name}`
+        document.body.append(document.createElement('br'), a)
+      })
+
+      room.onPeerJoin(id => log('PEER JOINED:', id.slice(0,6)))
+      room.onPeerLeave(id => log('PEER LEFT:', id.slice(0,6)))
+
+      document.getElementById('file').disabled = false
+      document.getElementById('inspect').disabled = false
+    }
+
+    document.getElementById('file').onchange = async e => {
+      const f = e.target.files[0]
+      if (!f) return
+      log(`-> sending "${f.name}" (${f.size} bytes)…`)
+      const buf = await f.arrayBuffer()
+      await sendFile(buf, null, {name: f.name, size: f.size, type: f.type},
+                     pct => log(`  sending: ${Math.round(pct*100)}%`))
+      log('-> sent.')
+    }
+
+    // Dig into the real RTCPeerConnection Trystero created and ask WebRTC's own
+    // stats which candidate pair won. candidateType 'relay' = TURN was used.
+    document.getElementById('inspect').onclick = async () => {
+      const peers = room.getPeers()            // { peerId: RTCPeerConnection }
+      const ids = Object.keys(peers)
+      if (!ids.length) return log('no peers connected yet')
+
+      for (const id of ids) {
+        const pc = peers[id]
+        const stats = await pc.getStats()
+        let pair, local, remote
+        stats.forEach(r => {
+          if (r.type === 'candidate-pair' && (r.selected || r.nominated) && r.state === 'succeeded') pair = r
+        })
+        if (!pair) { log(`peer ${id.slice(0,6)}: no succeeded pair yet`); continue }
+        stats.forEach(r => {
+          if (r.id === pair.localCandidateId) local = r
+          if (r.id === pair.remoteCandidateId) remote = r
+        })
+        const verdict = (local?.candidateType === 'relay' || remote?.candidateType === 'relay')
+          ? 'RELAY (TURN) — bytes go through metered'
+          : 'DIRECT — peer-to-peer, no relay'
+        log(`peer ${id.slice(0,6)}: local=${local?.candidateType} remote=${remote?.candidateType}  => ${verdict}`)
+      }
+    }
+  </script>
+</body>
+</html>
