@@ -65,8 +65,10 @@ function newXfer(label, size) {
 function getRoomId() {
   let id = location.hash.slice(1)
   if (!id) {
-    const bytes = crypto.getRandomValues(new Uint8Array(8))
-    id = Array.from(bytes, b => b.toString(36)).join('').slice(0, 10)
+    // 4 chars, no look-alikes (0/o, 1/l/i) so it's easy to type on a phone
+    const chars = '23456789abcdefghjkmnpqrstuvwxyz'
+    const bytes = crypto.getRandomValues(new Uint8Array(4))
+    id = Array.from(bytes, b => chars[b % chars.length]).join('')
     location.hash = id
   }
   return id
@@ -75,6 +77,12 @@ function getRoomId() {
 // --- synchronous UI (works before Trystero loads) ---
 const roomId = getRoomId()
 shareInput.value = location.href
+
+// Pasting a link that differs only after '#' into an already-open tab doesn't
+// reload the page, so we'd stay in the old room. Reload to join the new one.
+window.addEventListener('hashchange', () => {
+  if (location.hash.slice(1) !== roomId) location.reload()
+})
 
 $('#copy').addEventListener('click', async () => {
   try { await navigator.clipboard.writeText(location.href) } catch {}
