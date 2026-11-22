@@ -17,14 +17,10 @@ const LIBS = {
 
 // --- DOM helpers ---
 const $ = sel => document.querySelector(sel)
-const logEl = $('#log')
 
+// Developer log: goes to the browser console only (no on-page log).
 function diag(text, cls = '') {
-  const line = document.createElement('div')
-  line.className = cls
-  line.textContent = `${new Date().toLocaleTimeString()}  ${text}`
-  logEl.append(line)
-  logEl.scrollTop = logEl.scrollHeight
+  ;(cls === 'bad' ? console.warn : console.info)('[airdrop]', text)
 }
 
 function setStatus(text, ok = false) {
