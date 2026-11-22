@@ -6,178 +6,242 @@
   <title>airdrop.harsath.com</title>
   <style>
     :root {
-      --text: #111;
-      --muted: #777;
-      --border: #e3e3e3;
-      --accent: #2563eb;
-      --ok: #16a34a;
+      --bg: #fff; --text: #111; --muted: #6b6b6b; --border: #e3e3e3; --soft: #f5f5f5;
+      --accent: #2563eb; --accent-soft: #eef3ff; --ok: #16a34a; --err: #dc2626; --warn: #b45309;
+      --btn: #111; --btn-text: #fff; --btn-hover: #333;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #121212; --text: #ececec; --muted: #9a9a9a; --border: #2c2c2c; --soft: #1c1c1c;
+        --accent: #6b9bff; --accent-soft: #1a2333; --ok: #4ade80; --err: #f87171; --warn: #fbbf24;
+        --btn: #ececec; --btn-text: #111; --btn-hover: #cfcfcf;
+      }
     }
     * { box-sizing: border-box; }
     body {
-      font-family: system-ui, -apple-system, sans-serif;
-      color: var(--text);
-      max-width: 620px;
-      margin: 40px auto;
-      padding: 0 16px;
-      line-height: 1.5;
+      font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text);
+      max-width: 720px; margin: 40px auto; padding: 0 16px; line-height: 1.5;
     }
+    [hidden] { display: none !important; }
     h1 { font-size: 20px; margin: 0 0 2px; }
+    h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 28px 0 8px; }
+    h3 { font-size: 15px; margin: 0 0 4px; }
     .sub { color: var(--muted); font-size: 13px; margin-bottom: 20px; }
     .header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
-    .share-label { font-size: 13px; color: var(--muted); margin-top: 8px; }
-    button.ghost { background: transparent; color: var(--accent); padding: 4px 8px; }
-    button.ghost:hover { background: #f0f4ff; }
+    .note { color: var(--muted); font-size: 12px; }
+    .err { color: var(--err); font-size: 13px; }
+    .ok { color: var(--ok); }
+    .muted { color: var(--muted); }
+    a { color: var(--accent); }
 
-    dialog#how {
-      max-width: 520px; width: calc(100% - 32px); border: 1px solid var(--border);
-      border-radius: 12px; padding: 0; color: var(--text);
-    }
-    dialog#how::backdrop { background: rgba(0, 0, 0, .4); }
-    .how-head {
-      display: flex; justify-content: space-between; align-items: center;
-      padding: 14px 18px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: #fff;
-    }
-    .how-body { padding: 4px 18px 18px; font-size: 14px; }
-    .how-body h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 18px 0 4px; }
-    .how-body p { margin: 6px 0; }
-    .how-body ul { margin: 6px 0; padding-left: 18px; }
-    .how-body li { margin: 5px 0; }
-    .how-body code { background: #f2f2f2; padding: 1px 4px; border-radius: 4px; font-size: 12px; }
-    .how-body a { color: var(--accent); }
-
-    .row { display: flex; gap: 8px; align-items: center; margin: 12px 0; }
-    input[type=text], input[readonly] {
-      flex: 1; font-size: 13px; padding: 8px 10px;
-      border: 1px solid var(--border); border-radius: 6px;
-      font-family: ui-monospace, monospace;
-    }
     button {
-      font-size: 13px; padding: 8px 12px; border: none; border-radius: 6px;
-      background: #111; color: #fff; cursor: pointer;
+      font: inherit; font-size: 13px; padding: 8px 12px; border: none; border-radius: 6px;
+      background: var(--btn); color: var(--btn-text); cursor: pointer;
     }
-    button:hover { background: #333; }
+    button:hover { background: var(--btn-hover); }
     button:disabled { opacity: .4; cursor: default; }
+    button.ghost { background: transparent; color: var(--accent); padding: 4px 8px; }
+    button.ghost:hover { background: var(--accent-soft); }
+    input[type=text], input[type=password], input[readonly] {
+      font-size: 13px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px;
+      background: var(--bg); color: var(--text); min-width: 0;
+    }
+    input[readonly] { font-family: ui-monospace, monospace; }
+    .row { display: flex; gap: 8px; align-items: center; margin: 8px 0; }
+    .row > input { flex: 1; }
 
-    .status { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
-    .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
+    /* start screen */
+    .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .card { border: 1px solid var(--border); border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+    .card p { margin: 0; color: var(--muted); font-size: 13px; flex: 1; }
+    @media (max-width: 560px) { .cards { grid-template-columns: 1fr; } }
+
+    /* room */
+    .share { display: grid; grid-template-columns: 1fr auto; gap: 16px; align-items: start; }
+    .share-label { font-size: 13px; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+    .badge { font-size: 11px; padding: 1px 8px; border-radius: 99px; background: var(--soft); border: 1px solid var(--border); color: var(--text); }
+    .qr-wrap { text-align: center; }
+    #qr { width: 132px; height: 132px; background: #fff; border-radius: 8px; padding: 4px; }
+    #qr svg { width: 100%; height: 100%; display: block; }
+    @media (max-width: 560px) { .share { grid-template-columns: 1fr; } .qr-wrap { justify-self: center; } }
+
+    .status { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); margin-top: 6px; }
+    .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); flex: none; }
     .dot.on { background: var(--ok); }
 
     #drop {
-      border: 2px dashed var(--border); border-radius: 8px;
-      padding: 36px 16px; text-align: center; color: var(--muted);
+      border: 2px dashed var(--border); border-radius: 8px; margin-top: 20px;
+      padding: 32px 16px; text-align: center; color: var(--muted);
       cursor: pointer; transition: border-color .15s, background .15s;
     }
-    #drop.drag { border-color: var(--accent); background: #f5f8ff; color: var(--text); }
+    #drop.drag { border-color: var(--accent); background: var(--accent-soft); color: var(--text); }
     #drop strong { color: var(--text); }
+    label.burn { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; margin-top: 10px; color: var(--muted); cursor: pointer; }
+    label.burn input { margin-top: 3px; }
 
-    .xfers { list-style: none; margin: 12px 0 0; padding: 0; }
-    .xfer { padding: 8px 0; border-top: 1px solid var(--border); font-size: 13px; }
-    .xfer:first-child { border-top: none; }
-    .xfer .head { display: flex; justify-content: space-between; gap: 12px; }
-    .xfer .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .xfer .meta { color: var(--muted); white-space: nowrap; }
-    .bar { height: 5px; background: #eee; border-radius: 3px; overflow: hidden; margin-top: 5px; }
+    .files { list-style: none; margin: 0; padding: 0; }
+    .file { padding: 10px 0; border-top: 1px solid var(--border); font-size: 13px; }
+    .file:first-child { border-top: none; }
+    .file .head, .file .sub2 { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+    .file .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+    .file .size, .file .info { color: var(--muted); white-space: nowrap; }
+    .file .info { overflow: hidden; text-overflow: ellipsis; }
+    .file .actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+    .file .actions button { padding: 4px 10px; }
+    .bar { height: 5px; background: var(--soft); border-radius: 3px; overflow: hidden; margin-top: 6px; }
     .bar > span { display: block; height: 100%; width: 0; background: var(--accent); transition: width .1s; }
-    .xfer.done .bar > span { background: var(--ok); }
-    a.dl { color: var(--accent); text-decoration: none; }
     .empty { color: var(--muted); font-size: 13px; }
 
-    h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 28px 0 8px; }
+    details { margin-top: 28px; }
+    summary { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); cursor: pointer; }
     #log {
-      background: #111; color: #fff; padding: 12px; border-radius: 8px;
-      height: 240px; overflow: auto;
-      font-family: ui-monospace, monospace; font-size: 12px; white-space: pre-wrap;
+      background: #111; color: #e8e8e8; padding: 12px; border-radius: 8px; margin-top: 8px;
+      height: 200px; overflow: auto; font-family: ui-monospace, monospace; font-size: 12px; white-space: pre-wrap;
     }
-    #log .relay { color: #fbbf24; }
-    #log .direct { color: #4ade80; }
-    #log .dim { color: #c8c8c8; }
+    #log .bad { color: #f87171; } #log .good { color: #4ade80; } #log .dim { color: #a0a0a0; }
+
+    dialog {
+      max-width: 520px; width: calc(100% - 32px); border: 1px solid var(--border);
+      border-radius: 12px; padding: 0; color: var(--text); background: var(--bg);
+    }
+    dialog::backdrop { background: rgba(0, 0, 0, .5); }
+    .dlg-head {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 14px 18px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--bg);
+    }
+    .dlg-body { padding: 4px 18px 18px; font-size: 14px; }
+    .dlg-body h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 18px 0 4px; }
+    .dlg-body p { margin: 6px 0; }
+    .dlg-body ul { margin: 6px 0; padding-left: 18px; }
+    .dlg-body li { margin: 5px 0; }
+    .dlg-body code { background: var(--soft); padding: 1px 4px; border-radius: 4px; font-size: 12px; }
+    #pwForm { padding: 18px; display: flex; flex-direction: column; gap: 10px; }
+    #pwForm .row { margin: 0; justify-content: flex-end; }
   </style>
 </head>
 <body>
   <div class="header">
     <div>
       <h1>airdrop.harsath.com</h1>
-      <div class="sub">Peer-to-peer encrypted file transfer. Bytes go browser-to-browser, never stored on a server.</div>
+      <div class="sub">Encrypted file drop between your devices. Files are encrypted in your browser and deleted after 3 hours.</div>
     </div>
     <button id="howBtn" class="ghost">How it works?</button>
   </div>
 
-  <dialog id="how">
-    <div class="how-head">
-      <strong>How it works</strong>
-      <button id="howClose" class="ghost">✕</button>
+  <p id="fatal" class="err" hidden></p>
+
+  <!-- start screen: shown when the URL has no room -->
+  <section id="start" hidden>
+    <p id="startError" class="err" hidden></p>
+    <div class="cards">
+      <div class="card">
+        <h3>Link room</h3>
+        <p>Anyone with the link can join. The encryption key is part of the link, so share it only with people you trust.</p>
+        <button id="newPublic">Create room</button>
+      </div>
+      <form class="card" id="newProtectedForm">
+        <h3>Password room</h3>
+        <p>The link alone isn't enough: people also need the password. Send the password separately from the link.</p>
+        <input type="password" id="newPw" placeholder="Password (at least 6 characters)" minlength="6" required autocomplete="new-password" />
+        <button type="submit" id="newProtectedBtn">Create password room</button>
+      </form>
     </div>
-    <div class="how-body">
-      <p><b>The short version:</b> your file goes straight from one browser to another over a
-      <b>WebRTC data channel</b>. It is never uploaded to or stored on any server we run.</p>
+  </section>
 
-      <h3>Finding the other peer (signaling)</h3>
-      <p>Two browsers behind NAT can't address each other directly. This app uses public
-      <b>WebTorrent WebSocket trackers</b> (the BitTorrent tracker protocol) for the introduction.
-      Both announce the same <code>infohash</code> (from app ID + your room) and the tracker relays
-      each side's WebRTC handshake, the <code>SDP</code> offer/answer. It passes only these tiny text
-      messages and never sees your files.</p>
+  <!-- room screen -->
+  <section id="room" hidden>
+    <div class="share">
+      <div>
+        <div class="share-label">Share this link <span id="kind" class="badge"></span></div>
+        <div class="row">
+          <input id="link" readonly />
+          <button id="copy">Copy</button>
+        </div>
+        <div id="kindNote" class="note"></div>
+        <div class="status"><span class="dot" id="dot"></span><span id="status">Connecting…</span></div>
+      </div>
+      <div class="qr-wrap">
+        <div id="qr"></div>
+        <div class="note">Scan to open on a phone</div>
+      </div>
+    </div>
 
-      <h3>Punching through NAT (STUN + ICE)</h3>
-      <p>Each browser asks a <b>STUN</b> server "what's my public IP:port?" and collects candidate
-      addresses. The browser's built-in <b>ICE agent</b> then tries every candidate pair and keeps
-      the first that connects. On the same network this is a direct peer-to-peer link that touches
-      no server at all.</p>
+    <div id="drop">
+      <strong>Drop files here</strong> or click to pick.<br />
+      Everyone in this room can download them. Max 50 MB per file.
+    </div>
+    <input id="file" type="file" multiple hidden />
+    <label class="burn"><input type="checkbox" id="burn" />
+      <span>Burn after read: the first person to download a file deletes it for everyone.</span></label>
 
-      <h3>When direct fails (TURN relay)</h3>
-      <p>Strict/corporate firewalls (symmetric NAT) block direct connections. ICE then falls back to a
-      <b>TURN relay</b>: both peers send to a relay that forwards between them. This app uses
-      <a href="https://www.metered.ca/tools/openrelay/" target="_blank" rel="noopener">metered.ca (the
-      OpenRelay project)</a>. Free tier caps relayed traffic at ~<b>20 GB/month</b>, and TURN relays
-      every byte, so a transfer counts roughly twice (in + out). Direct transfers skip it entirely.</p>
+    <h2>Files</h2>
+    <ul class="files" id="files"></ul>
+    <p class="empty" id="empty">No files yet. Files stay for 3 hours after upload.</p>
+
+    <p class="note"><a href="#">Start a new room</a></p>
+  </section>
+
+  <details>
+    <summary>Diagnostics</summary>
+    <div id="log"></div>
+  </details>
+
+  <dialog id="pw">
+    <form id="pwForm">
+      <strong>This room is password protected</strong>
+      <input type="password" id="pwInput" placeholder="Room password" autocomplete="current-password" required />
+      <span id="pwError" class="err"></span>
+      <div class="row">
+        <button type="button" class="ghost" id="pwCancel">Leave</button>
+        <button type="submit">Join</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="how">
+    <div class="dlg-head">
+      <strong>How it works</strong>
+      <button id="howClose" class="ghost">&#x2715;</button>
+    </div>
+    <div class="dlg-body">
+      <p><b>The short version:</b> your browser encrypts the file, uploads the encrypted bytes to
+      storage, and the other devices download and decrypt them. The storage only ever sees scrambled
+      bytes. Files are deleted after 3 hours, or right after the first download if you tick
+      <i>burn after read</i>.</p>
+
+      <h3>Rooms and keys</h3>
+      <ul>
+        <li><b>Link room:</b> the part of the link after <code>#</code> is a random key. Browsers never
+        send that part to any server. The room's name on the server is a one-way hash of the key.</li>
+        <li><b>Password room:</b> your browser stretches the password (PBKDF2, 600,000 rounds) into an
+        encryption key, which never leaves the browser, and a separate proof that lets the server
+        check you know the password. Five wrong tries locks you out for 15 minutes.</li>
+      </ul>
+
+      <h3>What the server can see</h3>
+      <p>File sizes, upload times, and which anonymous browser uploaded them. Not file names, not
+      contents, not the key or password.</p>
 
       <h3>For the nerds</h3>
       <ul>
-        <li><b>Encryption:</b> WebRTC data channels are always <b>DTLS</b>-encrypted end-to-end. Even
-        when relayed, TURN only sees ciphertext. SDP fingerprints let each peer verify the other.</li>
-        <li><b>Topology:</b> full mesh. With N peers, the sender uploads N−1 copies of a file. Fine
-        for a few peers, heavy beyond ~8.</li>
-        <li><b>Rendezvous:</b> the room ID lives in the URL <code>#hash</code>, so the static host
-        (GitHub Pages) needs no server-side routing.</li>
-        <li><b>Diagnostics:</b> the box below shows the real chosen candidate pair (<span
-        style="color:#b45309">RELAY</span> vs <span style="color:#15803d">DIRECT</span>) with actual
-        IPs and the STUN/TURN endpoint used. "inspect connections" re-reads WebRTC's own stats.</li>
-        <li><b>Limits:</b> 5 MB per file, received files buffered in memory, no resume if a tab closes
-        mid-transfer.</li>
+        <li><b>Backend:</b> Supabase. Anonymous auth gives each browser an ID, Postgres row-level
+        security limits every table, file and realtime channel to room members, Storage holds the
+        encrypted files, and Realtime pushes new files and who's online.</li>
+        <li><b>Encryption:</b> AES-256-GCM via WebCrypto, a fresh random IV per file and per name.</li>
+        <li><b>Uploads:</b> resumable (tus) in 6 MB chunks, so flaky connections retry instead of failing.</li>
+        <li><b>Async:</b> the other device doesn't need to be online when you send.</li>
+        <li><b>Limits:</b> 50 MB per file; files are held in memory while encrypting and decrypting.</li>
       </ul>
     </div>
   </dialog>
 
-  <div class="share-label">Share this URL</div>
-  <div class="row">
-    <input id="share" readonly />
-    <button id="copy">Copy link</button>
-  </div>
-  <div class="status">
-    <span class="dot" id="dot"></span>
-    <span id="peers">Starting…</span>
-  </div>
-
-  <div id="drop">
-    <strong>Drop files here</strong> or click to pick.<br />
-    Sent to everyone in this room. Max 5 MB per file.
-  </div>
-  <input id="file" type="file" multiple hidden />
-
-  <ul class="xfers" id="xfers">
-    <li class="empty" id="empty">No transfers yet.</li>
-  </ul>
-
-  <h2>Diagnostics <button id="inspect" style="float:right;padding:2px 8px;font-size:11px" disabled>inspect connections</button></h2>
-  <div id="log"></div>
-
   <script>
-    // "How it works" modal — native <dialog>, no dependencies.
     const howDlg = document.getElementById('how')
     document.getElementById('howBtn').addEventListener('click', () => howDlg.showModal())
     document.getElementById('howClose').addEventListener('click', () => howDlg.close())
-    howDlg.addEventListener('click', e => { if (e.target === howDlg) howDlg.close() }) // click backdrop
+    howDlg.addEventListener('click', e => { if (e.target === howDlg) howDlg.close() })
   </script>
+  <script src="https://cdn.jsdelivr.net/npm/tus-js-client@4.3.1/dist/tus.min.js"></script>
   <script type="module" src="./app.js"></script>
 </body>
 </html>

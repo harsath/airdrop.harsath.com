@@ -1,112 +1,83 @@
 # airdrop.harsath.com
 
-Peer-to-peer, bidirectional file transfer in the browser. No backend and no central storage — files travel directly between browsers over a WebRTC data channel. The site itself is fully static.
+Encrypted file drop between your own devices, in both directions, with any number of devices in a room. Built for moving files between a locked-down corporate VM and a personal laptop.
 
-Built for moving files between a corporate VM (locked-down firewall) and a personal laptop, in both directions, with more than two participants supported.
+Files are encrypted in the browser, stored on Supabase as ciphertext, and deleted after 3 hours. The receiving device doesn't need to be online when you send. Everything goes over HTTPS/WSS on port 443, which is the traffic corporate firewalls most often allow.
 
 ## How it works
 
-- **Signaling** — [Trystero](https://github.com/dmotz/trystero) exchanges the WebRTC handshake over public WebTorrent WebSocket trackers, so no signaling server is needed. The tracker list is set in `RELAY_URLS` in `app.js`; `tracker.webtorrent.dev` is the primary (reachable from the target corporate network). If trackers ever get blocked everywhere, Trystero can switch to a Firebase Realtime Database strategy instead (Google infra on `wss:443`) — a documented fallback.
-- **Relay when direct fails** — a free [metered.ca](https://www.metered.ca/) TURN server relays the encrypted stream when a direct peer-to-peer path is blocked (e.g. strict corporate firewalls). On a permissive network (same LAN), the transfer goes direct and touches no server at all.
-- **Hosting** — static files on GitHub Pages.
-
-A room is identified by the URL hash (`#roomid`), which is generated on first visit. Share the full URL; anyone who opens it joins the same room.
-
-### The handshake, in detail
-
-Two browsers behind NAT can't address each other directly. Three roles solve this, and they are easy to confuse because they all happen at connection setup:
-
-- **Signaling (the tracker)** — a public WebTorrent WebSocket tracker acts as a note-passer. Both peers announce the same infohash (derived from the app ID + room ID) and the tracker relays each peer's WebRTC session description to the other over a persistent WebSocket. It never reads or forwards the file bytes; it only brokers the introduction.
-- **STUN** — a separate server that tells a peer its own public IP and port as seen from the outside (the address its NAT maps its local UDP socket to). This becomes a reachable candidate that the other peer can target.
-- **TURN** — a relay used only when a direct path can't be established (e.g. symmetric NAT on a corporate network). Both peers send to the TURN server's fixed address and it forwards between them.
-
-The **ICE agent** built into each browser orchestrates all of this: it gathers candidate addresses (local, STUN-discovered public, and TURN relay), exchanges them inside the SDP via the tracker, tests every candidate pair, and keeps the first one that works. Once the data channel is open, the tracker and STUN are no longer involved; TURN stays in the path only if it was the winning route.
-
-```mermaid
-sequenceDiagram
-    participant A as Peer A (browser)
-    participant T as WebTorrent tracker
-    participant S as STUN server
-    participant B as Peer B (browser)
-
-    Note over A,B: Both share infohash = hash(appId + roomId)
-
-    A->>S: STUN request (from UDP socket)
-    S-->>A: your public addr = 203.0.113.5:44321
-    A->>A: createOffer() -> SDP (embeds candidates)
-    A->>T: announce(infohash, offers:[{offer_id, sdp}])
-
-    Note over B: B opens the #room link
-    B->>S: STUN request
-    S-->>B: your public addr = 198.51.100.9:55200
-    B->>T: announce(infohash)
-    T-->>B: push A's offer {offer_id, sdp}
-    B->>B: createAnswer() -> SDP
-    B->>T: announce(answer, offer_id)
-    T-->>A: push B's answer {offer_id, sdp}
-
-    Note over A,B: ICE connectivity checks (direct UDP)
-    A->>B: STUN check -> 198.51.100.9:55200
-    B->>A: STUN check -> 203.0.113.5:44321
-    Note over A,B: Winning candidate pair chosen
-    A-->>B: DataChannel open — file bytes flow peer-to-peer
-    Note over T,S: tracker + STUN no longer needed
+```
+ sender browser                       Supabase (free tier)                  receiver browser
+ ──────────────                       ────────────────────                  ────────────────
+ anonymous sign-in ────────────────► Auth ◄──────────────────────────────── anonymous sign-in
+ join room (RPC) ──────────────────► Postgres + row-level security ◄─────── join room (RPC)
+ subscribe room:<id> ──────────────► Realtime (presence + broadcast) ◄───── subscribe room:<id>
+ encrypt (AES-GCM)
+ resumable upload (tus) ───────────► Storage  drops/<room>/<file>
+ insert files row ─────────────────► Postgres ── trigger ── broadcast ─────► list updates
+                                                                            download ◄── Storage
+                                                                            decrypt, save
+                                     pg_cron every 10 min ─► cleanup Edge Function
 ```
 
-### Topology and its cost
+- **Auth:** anonymous sign-ins give each browser a user ID with no account.
+- **Postgres:** `rooms`, `room_members`, `files`. Every access rule (tables, storage objects, realtime channels) checks that `auth.uid()` is a member of the room.
+- **Storage:** private bucket `drops`, 50 MB per file, uploads via the tus resumable protocol in 6 MB chunks.
+- **Realtime:** a private channel per room. Presence shows who's online; a database trigger broadcasts `file_added` / `file_claimed` / `file_removed`.
+- **Cleanup:** `pg_cron` deletes expired rows every 10 minutes and calls the `cleanup` Edge Function, which deletes the matching storage objects (they can only be deleted through the Storage API).
+- **Hosting:** static files on GitHub Pages. A daily GitHub Action pings the database so the free project doesn't pause.
 
-Connections are a full mesh: with N participants, each peer holds a separate encrypted connection to every other peer. Sending one file therefore uploads N−1 copies from the sender — fine up to roughly 6–8 peers, then the sender's uplink becomes the bottleneck. For the intended two-machine use case this is a single copy.
+### Rooms and encryption
+
+| | Link room | Password room |
+|---|---|---|
+| URL | `/#<22-char key>` | `/#p/<10-char id>` |
+| Who can join | anyone with the link | anyone with the link **and** the password |
+| Encryption key | HKDF of the key in the link | PBKDF2 (600k rounds) of the password, then HKDF |
+| What the server stores | room id = one-way hash of the key | salt + bcrypt of a separate password proof |
+
+The part of a URL after `#` is never sent to any server. The server sees file sizes, times and anonymous uploader IDs, never names, contents, keys or passwords. Wrong passwords are limited to 5 per 15 minutes per browser.
+
+### Burn after read
+
+A per-file checkbox. The first member to download it claims it atomically (`claim_file`); from then on only they can read the object, it disappears from everyone else's list, and it's deleted right after their download (or within 15 minutes by cleanup if the download fails).
 
 ## Files
 
-| File | Purpose |
-|------|---------|
+| Path | Purpose |
+|---|---|
 | `index.html` | UI and styles |
-| `app.js` | Trystero room, TURN fetch, send/receive logic |
-| `CNAME` | Custom domain for GitHub Pages |
+| `app.js` | rooms, upload/download, realtime, UI logic |
+| `crypto.js` | all key derivation and encryption (WebCrypto) |
+| `supabase/migrations/0001_init.sql` | tables, access rules, bucket, triggers, cron job |
+| `supabase/functions/cleanup/index.ts` | Edge Function that deletes dead storage objects |
+| `.github/workflows/keepalive.yml` | daily ping so the free project doesn't pause |
+| `explore/` | throwaway learning scripts (the old WebRTC versions and the Supabase reachability probe) |
 
-## Fallback: Firebase signaling
+## Setup (one time)
 
-Not needed for the default setup (torrent trackers). Only use this if trackers get blocked on every network you care about. It swaps signaling to a free Firebase Realtime Database (Google infra on `wss:443`, which corporate firewalls allow but which won't rate-ban you like public Nostr relays do).
-
-To switch: set `TRYSTERO_URL` to `https://cdn.jsdelivr.net/npm/trystero@0.21.6/firebase/+esm`, replace the `relayUrls` option with `appId: FIREBASE_DB_URL`, then do this one-time Firebase setup:
-
-1. Open the [Firebase console](https://console.firebase.google.com/) and create a project (Analytics can be skipped).
-2. **Build → Realtime Database → Create Database.** Pick a location and start in **test mode**.
-3. Copy the database URL shown at the top of that page, e.g. `https://your-project-default-rtdb.firebaseio.com` (region variants look like `https://your-project-default-rtdb.europe-west1.firebasedatabase.app`).
-4. In the **Rules** tab, scope access to Trystero's path and publish:
-
-   ```json
-   {
-     "rules": {
-       "__trystero__": {
-         ".read": true,
-         ".write": true
-       }
-     }
-   }
-   ```
-
-5. Paste the database URL into `FIREBASE_DB_URL` at the top of `app.js`.
-
-Only the database URL is needed (no API key). Access is governed by the rules above, not by a secret, so the URL is safe to ship in the client.
+1. **Create a Supabase project** and enable **Authentication → Sign In / Providers → Allow anonymous sign-ins**.
+2. **Database:** paste `supabase/migrations/0001_init.sql` into **SQL Editor** and run it. It is safe to re-run.
+3. **Edge Function:** **Edge Functions → Deploy a new function → Via Editor**, name it `cleanup`, paste `supabase/functions/cleanup/index.ts`, deploy. Then open the function's **Details** and turn **Verify JWT** off (the cron job calls it without a token; it only deletes objects the database already marked dead).
+   With the CLI instead: `supabase functions deploy cleanup --no-verify-jwt --project-ref <ref>`.
+4. Put the project URL and publishable key at the top of `app.js` (and in the keep-alive workflow and the cron job URL in the migration).
 
 ## Run locally
-
-Serve the folder over HTTP (a module script and clipboard access need a real origin, not `file://`):
 
 ```
 python3 -m http.server 8000
 ```
 
-Open `http://localhost:8000` in two browser tabs (or two devices) to test a transfer.
+Open `http://localhost:8000` in two browsers (or a normal and a private window, so they get different anonymous users).
 
 ## Deploy
 
-Push to the repository's default branch, then enable GitHub Pages for that branch in the repository settings. Point the `airdrop.harsath.com` DNS record at GitHub Pages and keep the `CNAME` file in place.
+Push to the default branch; GitHub Pages serves it. Keep the `CNAME` file for the custom domain.
 
-## Known limits (v1)
+## Free-tier limits
 
-- Received files are buffered fully in memory, so very large files (multi-GB) may fail on low-memory devices. Streaming to disk is a planned upgrade.
-- The TURN API key is exposed in the client. This is metered.ca's intended model (the key is rate-limited), but rotate it if abuse occurs.
-- Closing a tab mid-transfer cancels it; there is no resume.
+- 50 MB per file, 1 GB total storage (3-hour expiry keeps usage low).
+- 5 GB egress per month; every download counts, uploads don't.
+- 200 concurrent realtime connections, 2M messages per month (only small notices go through Realtime).
+- The project pauses after about a week of no activity; the keep-alive workflow prevents that. GitHub disables scheduled workflows in repos with no commits for 60 days, so re-enable it in the Actions tab if that happens.
+- Files are held in memory while encrypting and decrypting, which is fine at 50 MB.
